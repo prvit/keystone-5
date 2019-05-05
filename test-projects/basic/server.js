@@ -2,7 +2,22 @@ const keystone = require('@keystone-alpha/core');
 
 const { port, staticRoute, staticPath } = require('./config');
 
-const initialData = require('./data');
+const { initialData, initialPosts } = require('./data');
+
+const initialiseLists = (keystoneApp, initialData) => {
+  return Promise.all(
+    Object.entries(initialData).map(([listName, items]) => {
+      const list = keystoneApp.lists[listName];
+      return keystoneApp.executeQuery({
+        query: `mutation ($items: [${list.gqlNames.createManyInputName}]) { ${
+          list.gqlNames.createManyMutationName
+        }(data: $items) { id } }`,
+        schemaName: 'admin',
+        variables: { items: items.map(d => ({ data: d })) },
+      });
+    })
+  );
+};
 
 keystone
   .prepare({ port })
@@ -16,14 +31,16 @@ keystone
       Object.values(keystoneApp.adapters).forEach(async adapter => {
         await adapter.dropDatabase();
       });
-      await keystoneApp.createItems(initialData);
+      await initialiseLists(keystoneApp, initialData);
+      await initialiseLists(keystoneApp, initialPosts);
     }
 
     server.app.get('/reset-db', async (req, res) => {
       Object.values(keystoneApp.adapters).forEach(async adapter => {
         await adapter.dropDatabase();
       });
-      await keystoneApp.createItems(initialData);
+      await initialiseLists(keystoneApp, initialData);
+      await initialiseLists(keystoneApp, initialPosts);
       res.redirect('/admin');
     });
     server.app.use(staticRoute, server.express.static(staticPath));

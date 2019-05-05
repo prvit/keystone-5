@@ -18,14 +18,36 @@ keystone
       Object.values(keystoneApp.adapters).forEach(async adapter => {
         await adapter.dropDatabase();
       });
-      await keystoneApp.createItems(initialData);
+      await Promise.all(
+        Object.entries(initialData).map(([listName, items]) => {
+          const list = keystoneApp.lists[listName];
+          return keystoneApp.executeQuery({
+            query: `mutation ($items: [${list.gqlNames.createManyInputName}]) { ${
+              list.gqlNames.createManyMutationName
+            }(data: $items) { id } }`,
+            schemaName: 'admin',
+            variables: { items: items.map(d => ({ data: d })) },
+          });
+        })
+      );
     }
 
     server.app.get('/reset-db', async (req, res) => {
       Object.values(keystoneApp.adapters).forEach(async adapter => {
         await adapter.dropDatabase();
       });
-      await keystoneApp.createItems(initialData);
+      await Promise.all(
+        Object.entries(initialData).map(([listName, items]) => {
+          const list = keystoneApp.lists[listName];
+          return keystoneApp.executeQuery({
+            query: `mutation ($items: [${list.gqlNames.createManyInputName}]) { ${
+              list.gqlNames.createManyMutationName
+            }(data: $items) { id } }`,
+            schemaName: 'admin',
+            variables: { items: items.map(d => ({ data: d })) },
+          });
+        })
+      );
       res.redirect('/admin');
     });
 
