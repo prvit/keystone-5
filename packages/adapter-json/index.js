@@ -57,6 +57,12 @@ class JSONAdapter extends BaseKeystoneAdapter {
     return this.write({});
   }
 
+  getDefaultPrimaryKeyConfig() {
+    // Required here due to circular refs
+    const { Uuid } = require('@keystone-alpha/fields');
+    return Uuid.primaryKeyDefaults[this.name].getConfig();
+  }
+
   getLowDBInstanceForList(key) {
     return this._dbInstance.get(key);
   }
@@ -152,7 +158,8 @@ class JSONListAdapter extends BaseListAdapter {
         ),
       };
     });
-  }
+
+    this._isRelationship = memoizeOne(path => this.fieldAdaptersByPath[path] && this.fieldAdaptersByPath[path].isRelationship)}
 
   async _create(input) {
     return await this.getDBCollection()
@@ -210,8 +217,18 @@ class JSONListAdapter extends BaseListAdapter {
     const conditions = this._allQueryConditions();
     // Build up a list of functions we want to chain together as AND filters
     return Object.entries(where).map(([condition, value]) => {
-      // TODO: if (isRelationship(condition)) { return buildRelationshipClause(condition, value) }
-      return conditions[condition](value);
+      if (!this._isRelationship(condition)) {
+        return conditions[condition](value);
+      }
+
+      return () => obj => {
+        const refListWhere = {
+          AND: [{ id_in: obj[condition] }, value]
+        };
+        const refListAdapter = this.fieldAdaptersByPath[condition].getRefListAdapter();
+        const { count } = refListAdapter._itemsQuery({ where: refListWhere }, { meta: true });
+        return count > 0;
+      };
     });
   }
 
@@ -243,8 +260,8 @@ class JSONListAdapter extends BaseListAdapter {
    * collection
    *   .filter(item => new RegExp(f('foo')).test(item.name))
    *   .filter(_.overEvery([
-   *     .filter(item => item.done === false)
-   *     .filter(item => item.deleted === false)
+   *     item => item.done === false,
+   *     item => item.deleted === false,
    *   ]))
    *   .filter(_.overSome([
    *     item => new RegExp(f('bar')).test(item.name),
